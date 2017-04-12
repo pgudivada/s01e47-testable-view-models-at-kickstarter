@@ -56,12 +56,12 @@ extension Product {
     }
 }
 
-class ViewController: UIViewController {
+class ViewController: UIViewController, PKPaymentAuthorizationViewControllerDelegate {
     let product = Product(name: "Test product", price: 100)
+    var didAuthorize = false
     
     @IBOutlet weak var statusLabel: UILabel!
     @IBOutlet weak var buyButton: UIButton!
-    var didAuthorize = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -72,17 +72,15 @@ class ViewController: UIViewController {
         let paymentController = PKPaymentAuthorizationViewController(paymentRequest: product.paymentRequest)
         paymentController.delegate = self
         present(paymentController, animated: true, completion: nil)
-        statusLabel.text = "Starting payment..."
+        statusLabel.text = "Authorizing..."
+        didAuthorize = false
     }
     
-}
-
-extension ViewController: PKPaymentAuthorizationViewControllerDelegate {
     func paymentAuthorizationViewControllerWillAuthorizePayment(_ controller: PKPaymentAuthorizationViewController) {
-        statusLabel.text = "Processing..."
     }
+
     func paymentAuthorizationViewController(_ controller: PKPaymentAuthorizationViewController, didAuthorizePayment payment: PKPayment, completion: @escaping (PKPaymentAuthorizationStatus) -> Void) {
-        statusLabel.text = "Authorized, attempting to charge."
+        didAuthorize = true
         FakeStripe.shared.createToken(with: payment) { token, error in
             if let token = token {
                 Webservice.shared.processToken(token: token, product: self.product, callback: { success in
@@ -90,7 +88,7 @@ extension ViewController: PKPaymentAuthorizationViewControllerDelegate {
                     completion(success ? .success : .failure)
                 })
             } else if let error = error {
-                self.statusLabel.text = "Something went wrong"
+                self.statusLabel.text = "Couldn't create Stripe token."
                 print(error)
                 completion(.failure)
             } else {
@@ -98,7 +96,11 @@ extension ViewController: PKPaymentAuthorizationViewControllerDelegate {
             }
         }
     }
+
     func paymentAuthorizationViewControllerDidFinish(_ controller: PKPaymentAuthorizationViewController) {
+        if !didAuthorize {
+            statusLabel.text = nil
+        }
         controller.dismiss(animated: true, completion: nil)
     }
 }
